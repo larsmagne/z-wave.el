@@ -1,4 +1,4 @@
-;;; z-stick.el --- getting data from a Z-Stick Z-Wave device
+;;; z-stick.el --- getting data from a Z-Stick Z-Wave device -*- lexical-binding: t -*-
 ;; Copyright (C) 2018 Lars Magne Ingebrigtsen
 
 ;; Author: Lars Magne Ingebrigtsen <larsi@gnus.org>
@@ -24,6 +24,156 @@
 ;;; Code:
 
 (require 'cl)
+
+(defvar zs-device "/dev/z-stick"
+  "The device, which will usually be /dev/ttyUSB0 or /dev/ttyACM0.
+Or something else, if you have udev rules like
+
+KERNEL==\"ttyACM[0-9]*\", SUBSYSTEM==\"tty\", SUBSYSTEMS==\"usb\", ATTRS{idProduct}==\"0200\", ATTRS{idVendor}==\"0658\", MODE=\"0666\", SYMLINK+=\"z-stick\"
+")
+
+(defvar zs-buffer "*z-stick*")
+
+(defun zs-start ()
+  (with-current-buffer (get-buffer-create "*z-stick*")
+    (erase-buffer)
+    (set-buffer-multibyte nil)
+    (let ((proc (make-serial-process :port zs-device
+				     :speed 115200
+				     :coding 'no-conversion
+				     :buffer (current-buffer))))
+      
+      (set-process-filter
+       proc
+       (lambda (_proc string)
+	 (when (buffer-live-p (get-buffer zs-buffer))
+	   (with-current-buffer zs-buffer
+	     (goto-char (point-max))
+	     (insert string)
+	     (message "%s" string)
+	     ;; ACK the message we got from the Z-Stick.
+	     (zs-send '(#x06) t))))))))
+
+(defvar zs-transaction-types
+  '((#x01 sof)				; Start of field
+    (#x06 ack)				; Acknowledgement
+    (#x15 nak)				; Error
+    (#x18 can))) ; Whatever
+
+(defvar zs-commands
+  '((#x01 receive-status-routed-busy)
+    (#x04 receive-status-type-broad)
+
+    (#x02 serial-api-get-init-data)
+    (#x03 serial-api-appl-node-information)
+    (#x04 application-command-handler)
+    (#x05 get-controller-capabilities)
+    (#x06 serial-api-set-timeouts)
+    (#x07 serial-api-get-capabilities)
+    (#x08 serial-api-soft-reset)
+
+    (#x12 send-node-information)
+    (#x13 send-data)
+    (#x15 get-version)
+    (#x17 r-f-power-level-set)
+    (#x1c get-random)
+    (#x20 memory-get-id)
+    (#x21 memory-get-byte)
+    (#x23 read-memory)
+
+    (#x40 set-learn-node-state)		; not implemented
+    (#x41 get-node-protocol-info) ; get protocol info (baud rate, listening, etc.) for a given node
+    (#x42 set-default) ; reset controller and node info to default (original) values
+    (#x43 new-controller)		; not implemented
+    (#x44 replication-command-complete) ; replication send data complete
+    (#x45 replication-send-data)	; replication send data
+    (#x46 assign-return-route) ; assign a return route from the specified node to the controller
+    (#x47 delete-return-route) ; delete all return routes from the specified node
+    (#x48 request-node-neighbor-update) ; ask the specified node to update its neighbors (then read them from the controller)
+    (#x49 application-update) ; get a list of supported (and controller) command classes
+    (#x4a add-node-to-network) ; control the addnode (or addcontroller) process...start, stop, etc.
+    (#x4b remove-node-from-network) ; control the removenode (or removecontroller) process...start, stop, etc.
+    (#x4c create-new-primary) ; control the createnewprimary process...start, stop, etc.
+    (#x4d controller-change) ; control the transferprimary process...start, stop, etc.
+    (#x50 set-learn-mode) ; put a controller into learn mode for replication/ receipt of configuration info
+    (#x51 assign-suc-return-route)  ; assign a return route to the suc
+    (#x52 enable-suc)	; make a controller a static update controller
+    (#x53 request-network-update)	; network update for a suc(?)
+    (#x54 set-suc-node-id) ; identify a static update controller node id
+    (#x55 delete-suc-return-route)   ; remove return routes to the suc
+    (#x56 get-suc-node-id) ; try to retrieve a static update controller node id (zero if no suc present)
+    (#x5a request-node-neighbor-update-options) ; allow options for request node neighbor update
+    (#x5e explore-request-inclusion)		; supports nwi
+    (#x60 request-node-info) ; get info (supported command classes) for the specified node
+    (#x61 remove-failed-node-id)  ; mark a specified node id as failed
+    (#x62 is-failed-node-id) ; check to see if a specified node has failed
+    (#x63 replace-failed-node) ; remove a failed node from the controller's list (?)
+    (#x80 get-routing-info) ; get a specified node's neighbor information from the controller
+    (#xa0 serial-api-slave-node-info) ; set application virtual slave node information
+    (#xa1 application-slave-command-handler) ; slave command handler
+    (#xa2 send-slave-node-info)	 ; send a slave node information frame
+    (#xa3 send-slave-data)	 ; send data from slave
+    (#xa4 set-slave-learn-mode)	 ; enter slave learn mode
+    (#xa5 get-virtual-nodes)	 ; return all virtual nodes
+    (#xa6 is-virtual-node)	 ; virtual node test
+    (#xd0 set-promiscuous-mode) ; set controller into promiscuous mode to listen to all frames
+    (#xd1 promiscuous-application-command-handler)))
+
+(defun zs-parse (string)
+  (let ((elems nil))
+    (with-temp-buffer
+      (set-buffer-multibyte nil)
+      (insert string)
+      (goto-char (point-min))
+      (while (not (eobp))
+	(push
+	 (let ((type (cadr (assq (zs-read) zs-transaction-types))))
+	   (if (eq type 'sof)
+	       (zs-parse-field)
+	     type))
+	 elems)))
+    (nreverse elems)))
+
+(defun zs-read ()
+  (prog1
+      (following-char)
+    (forward-char 1)))
+  
+(defun zs-parse-field ()
+  (let ((length (zs-read))
+	(resreq (zs-read)))
+    (prog1
+	(list :length length
+	      :resreq (if (= resreq 0) 'request
+			'response)
+	      :command (cadr (assq (zs-read) zs-commands))
+	      :data (buffer-substring (point) (+ (point) (- length 3)))
+	      :checksum (char-after (+ (point) (- length 3))))
+      (forward-char (- length 2)))))
+
+(defun zs-send (bytes &optional no-checksum)
+  (zs-send-string (zs-make-string bytes no-checksum)))
+
+(defun zs-make-string (bytes &optional no-checksum)
+  "Compute the checksum for BYTES and return a string to send to Z-Stick."
+  (with-temp-buffer
+    (set-buffer-multibyte nil)
+    ;; The checksum is simply all the bytes XOR'd together, but
+    ;; starting with 255.
+    (let ((checksum #xff))
+      (insert (pop bytes))
+      (dolist (i bytes)
+	(insert i)
+	(setq checksum (logxor checksum i)))
+      (unless no-checksum
+	(insert checksum))
+      (buffer-string))))
+
+(defun zs-send-string (string)
+  (process-send-string (zs-process) string))
+
+(defun zs-process ()
+  (get-buffer-process (get-buffer zs-buffer)))
 
 (provide 'z-stick)
 
