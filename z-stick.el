@@ -86,7 +86,7 @@ KERNEL==\"ttyACM[0-9]*\", SUBSYSTEM==\"tty\", SUBSYSTEMS==\"usb\", ATTRS{idProdu
 
 (defvar zs-last-counter (make-hash-table))
 
-(defun zs-callback-receive-status-type-broad (command)
+(defun zs-callback-application-command-handler (command)
   (let* ((slots '((2 node)
 		  (3 status)
 		  (5 class-id)
@@ -134,10 +134,7 @@ KERNEL==\"ttyACM[0-9]*\", SUBSYSTEM==\"tty\", SUBSYSTEMS==\"usb\", ATTRS{idProdu
     (#x18 can))) ; Whatever
 
 (defvar zs-commands
-  '((#x01 receive-status-routed-busy)
-    (#x04 receive-status-type-broad)
-
-    (#x02 serial-api-get-init-data)
+  '((#x02 serial-api-get-init-data)
     (#x03 serial-api-appl-node-information)
     (#x04 application-command-handler)
     (#x05 get-controller-capabilities)
