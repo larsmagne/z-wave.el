@@ -69,7 +69,19 @@ KERNEL==\"ttyACM[0-9]*\", SUBSYSTEM==\"tty\", SUBSYSTEMS==\"usb\", ATTRS{idProdu
 		     (when (fboundp callback)
 		       (funcall callback command))))))
 	     ;; ACK the message we got from the Z-Stick.
-	     (zs-send '(#x06) t))))))))
+	     (zs-send '(#x06) t)))))
+      (set-process-sentinel
+       proc
+       (lambda (proc _string)
+	 (unless (process-live-p process)
+	   (run-at-time 10 nil 'zs-reconnect)))))))
+
+(defun zs-reconnect ()
+  ;; If the Z-Stick device doesn't exist, then wait some more and
+  ;; check again.
+  (if (file-exists-p zs-device)
+      (zs-start)
+    (run-at-time 10 nil 'zs-reconnect)))
 
 (defvar zs-last-counter (make-hash-table))
 
