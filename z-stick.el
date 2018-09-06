@@ -98,7 +98,6 @@ KERNEL==\"ttyACM[0-9]*\", SUBSYSTEM==\"tty\", SUBSYSTEMS==\"usb\", ATTRS{idProdu
 		append (list (intern (format ":%s" slot) obarray)
 			     (elt (getf command :data) (1- index)))))
 	 (last (gethash (getf message :node) zs-last-counter 0)))
-    (message "%s %s" message (getf command :data))
     (when (or (> (getf message :counter) last)
 	      (> (- last (getf message :counter)) 100))
       (setf (gethash (getf message :node) zs-last-counter)
@@ -110,8 +109,8 @@ KERNEL==\"ttyACM[0-9]*\", SUBSYSTEM==\"tty\", SUBSYSTEMS==\"usb\", ATTRS{idProdu
 	(server-eval-at
 	 (concat "tellstick-central-" tellstick-central-server)
 	 `(tellstick-execute-input
-	   ,(format "%03d%03d" (getf message :node) (getf message :sub-node)))))
-      )))
+	   ,(format "%03d%03d" (getf message :node)
+		    (getf message :sub-node))))))))
 
 (defun zs-complete-command-p (point)
   (save-excursion
