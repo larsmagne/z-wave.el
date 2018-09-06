@@ -42,6 +42,7 @@ KERNEL==\"ttyACM[0-9]*\", SUBSYSTEM==\"tty\", SUBSYSTEMS==\"usb\", ATTRS{idProdu
   (with-current-buffer (get-buffer-create "*z-stick*")
     (erase-buffer)
     (set-buffer-multibyte nil)
+    (switch-to-buffer (current-buffer))
     (let ((start (point-min))
 	  (proc (make-serial-process :port zs-device
 				     :speed 115200
@@ -73,7 +74,7 @@ KERNEL==\"ttyACM[0-9]*\", SUBSYSTEM==\"tty\", SUBSYSTEMS==\"usb\", ATTRS{idProdu
       (set-process-sentinel
        proc
        (lambda (proc _string)
-	 (unless (process-live-p process)
+	 (unless (process-live-p proc)
 	   (run-at-time 10 nil 'zs-reconnect)))))))
 
 (defun zs-reconnect ()
