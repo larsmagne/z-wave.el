@@ -102,15 +102,13 @@ KERNEL==\"ttyACM[0-9]*\", SUBSYSTEM==\"tty\", SUBSYSTEMS==\"usb\", ATTRS{idProdu
 	      (> (- last (getf message :counter)) 100))
       (setf (gethash (getf message :node) zs-last-counter)
 	    (getf message :counter))
-      (message "%s Doing %s %s"
-	       (format-time-string "%FT%T")
+      (message "%s Doing %s %s" (format-time-string "%FT%T")
 	       message (getf command :data))
-      (when t
-	(server-eval-at
-	 (concat "tellstick-central-" tellstick-central-server)
-	 `(tellstick-execute-input
-	   ,(format "%03d%03d" (getf message :node)
-		    (getf message :sub-node))))))))
+      (server-eval-at
+       (concat "tellstick-central-" tellstick-central-server)
+       `(tellstick-execute-input
+	 ,(format "%03d%03d" (getf message :node)
+		  (getf message :sub-node)))))))
 
 (defun zs-complete-command-p (point)
   (save-excursion
