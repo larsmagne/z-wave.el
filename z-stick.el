@@ -26,7 +26,7 @@
 ;;; Code:
 
 (require 'cl)
-(require 'server)
+(require 'eval-server)
 
 (defvar zs-device "/dev/z-stick"
   "The device, which will usually be /dev/ttyUSB0 or /dev/ttyACM0.
@@ -104,8 +104,8 @@ KERNEL==\"ttyACM[0-9]*\", SUBSYSTEM==\"tty\", SUBSYSTEMS==\"usb\", ATTRS{idProdu
 	    (getf message :counter))
       (message "%s Doing %s %s" (format-time-string "%FT%T")
 	       message (getf command :data))
-      (server-eval-at
-       (concat "tellstick-central-" tellstick-central-server)
+      (eval-at
+       tellstick-central-server 8701
        `(tellstick-execute-input
 	 ,(format "%03d%03d" (getf message :node)
 		  (getf message :sub-node)))))))
