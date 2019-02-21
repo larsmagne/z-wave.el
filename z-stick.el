@@ -105,7 +105,7 @@ KERNEL==\"ttyACM[0-9]*\", SUBSYSTEM==\"tty\", SUBSYSTEMS==\"usb\", ATTRS{idProdu
       (message "%s Doing %s %s" (format-time-string "%FT%T")
 	       message (getf command :data))
       (eval-at
-       tellstick-central-server 8701
+       "lights" tellstick-central-server 8701
        `(tellstick-execute-input
 	 ,(format "%03d%03d" (getf message :node)
 		  (getf message :sub-node)))))))
