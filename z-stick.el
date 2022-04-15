@@ -94,9 +94,9 @@ KERNEL==\"ttyACM[0-9]*\", SUBSYSTEM==\"tty\", SUBSYSTEMS==\"usb\", ATTRS{idProdu
 		  (6 counter)
 		  (8 sub-node)))
 	 (message
-	  (loop for (index slot) in slots
-		append (list (intern (format ":%s" slot) obarray)
-			     (elt (getf command :data) (1- index)))))
+	  (cl-loop for (index slot) in slots
+		   append (list (intern (format ":%s" slot) obarray)
+				(elt (getf command :data) (1- index)))))
 	 (last (gethash (getf message :node) zs-last-counter 0)))
     (when (or (> (getf message :counter) last)
 	      (> (- last (getf message :counter)) 100))
